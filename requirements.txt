@@ -1,0 +1,7 @@
+psycopg2-binary # Или другой драйвер БД (sqlite3, mysqlclient и т.д.)
+aiogram==3.0.0b7
+SQLAlchemy==2.0.20
+python-dotenv==1.0.0 # Для загрузки токена из .env файла
+openpyxl==3.1.2 # Для работы с Excel (pandas dependency)
+pandas==2.3.1 # Для создания Excel
+aiosqlite>=0.19.0
