@@ -5,6 +5,7 @@ from utils.decorators import safe_handler
 from utils.currency import parse_amount_currency
 from database.crud import get_sources, get_categories, add_transaction, delete_transaction
 from handlers.start import start_handler
+from translations import ru
 
 router = Router()
 
@@ -17,25 +18,27 @@ class TransactionState(StatesGroup):
     entering_comment = State()
     deleting_by_id = State()
 
-@router.message(lambda msg: msg.text == "➕ Добавить транзакцию")
+@router.message(lambda msg: msg.text == ru.TRANSACTIONS_ADD_TRANSACTION)
 @safe_handler
 async def start_transaction(message: types.Message, state: FSMContext):
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
-        [types.KeyboardButton(text="Доход")],
-        [types.KeyboardButton(text="Расход")]
+        [types.KeyboardButton(text=ru.TRANSACTIONS_TYPE_INCOME)],
+        [types.KeyboardButton(text=ru.TRANSACTIONS_TYPE_OUTCOME)]
     ])
     await state.set_state(TransactionState.choosing_type)
-    await message.answer("Выберите тип транзакции:", reply_markup=keyboard)
+    await message.answer(ru.TRANSACTIONS_CHOOSE_TYPE, reply_markup=keyboard)
 
-@router.message(TransactionState.choosing_type, F.text.in_({"Доход", "Расход"}))
+
+@router.message(TransactionState.choosing_type, F.text.in_({ru.TRANSACTIONS_TYPE_INCOME, ru.TRANSACTIONS_TYPE_OUTCOME}))
 @safe_handler
 async def choose_type(message: types.Message, state: FSMContext):
-    await state.update_data(is_income=(message.text == "Доход"))
+    await state.update_data(is_income=(message.text == ru.TRANSACTIONS_TYPE_INCOME))
     sources = get_sources()
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True,
         keyboard=[[types.KeyboardButton(text=s.name)] for s in sources])
     await state.set_state(TransactionState.choosing_source)
-    await message.answer("Выберите источник:", reply_markup=keyboard)
+    await message.answer(ru.TRANSACTIONS_CHOOSE_SOURCE, reply_markup=keyboard)
+
 
 @router.message(TransactionState.choosing_source)
 @safe_handler
@@ -43,14 +46,15 @@ async def choose_source(message: types.Message, state: FSMContext):
     sources = get_sources()
     source = next((s for s in sources if s.name == message.text), None)
     if not source:
-        await message.answer("Источник не найден.")
+        await message.answer(ru.SOURCES_NOT_FOUND)
         return
     await state.update_data(source_id=source.id)
     categories = get_categories()
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True,
         keyboard=[[types.KeyboardButton(text=c.name)] for c in categories])
     await state.set_state(TransactionState.choosing_category)
-    await message.answer("Выберите категорию:", reply_markup=keyboard)
+    await message.answer(ru.TRANSACTIONS_CHOOSE_CATEGORY, reply_markup=keyboard)
+
 
 @router.message(TransactionState.choosing_category)
 @safe_handler
@@ -58,11 +62,12 @@ async def choose_category(message: types.Message, state: FSMContext):
     categories = get_categories()
     category = next((c for c in categories if c.name == message.text), None)
     if not category:
-        await message.answer("Категория не найдена.")
+        await message.answer(ru.CATEGORIES_NOT_FOUND)
         return
     await state.update_data(category_id=category.id)
     await state.set_state(TransactionState.entering_amount)
-    await message.answer("Введите сумму (например: 118.86 RSD):")
+    await message.answer(ru.TRANSACTIONS_WRITE_SUM)
+
 
 @router.message(TransactionState.entering_amount)
 @safe_handler
@@ -71,9 +76,10 @@ async def enter_amount(message: types.Message, state: FSMContext):
         amount, currency = parse_amount_currency(message.text)
         await state.update_data(amount=amount, currency=currency)
         await state.set_state(TransactionState.entering_comment)
-        await message.answer("Введите комментарий (можно оставить пустым):")
+        await message.answer(ru.TRANSACTIONS_WRITE_COMMENT)
     except ValueError:
-        await message.answer("Неверный формат. Пример: 118.86 RSD")
+        await message.answer(ru.ERROR_WRONG_TRANSACTION_FORMAT)
+
 
 @router.message(TransactionState.entering_comment)
 @safe_handler
@@ -88,22 +94,23 @@ async def enter_comment(message: types.Message, state: FSMContext):
         comment=message.text
     )
     await message.answer(
-        f"✅ Транзакция {transaction.id} добавлена:\n"
-        f"Тип: {'Доход' if transaction.is_income else 'Расход'}\n"
-        f"Источник: {transaction.source.name}\n"
-        f"Категория: {transaction.category.name}\n"
-        f"Комментарий: {transaction.comment or '—'}\n"
-        f"Дата: {transaction.date.strftime('%Y-%m-%d %H:%M')}"
+        ru.TRANSACTIONS_TRANSACTION_ADDED.format(transaction.id) +
+        ru.TRANSACTIONS_TRANSACTION_ADDED_SOURCE.format(
+                ru.TRANSACTIONS_TYPE_INCOME if transaction.is_income else ru.TRANSACTIONS_TYPE_OUTCOME) +
+        ru.TRANSACTIONS_TRANSACTION_ADDED_SOURCE.format(transaction.source.name) +
+        ru.TRANSACTIONS_TRANSACTION_ADDED_CATEGORY.format(transaction.category.name) +
+        ru.TRANSACTIONS_TRANSACTION_ADDED_COMMENT.format(transaction.comment or '—') +
+        ru.TRANSACTIONS_TRANSACTION_ADDED_DATE.format(transaction.date.strftime('%Y-%m-%d %H:%M'))
     )
     await state.clear()
     await start_handler(message)
 
 
-@router.message(lambda msg: msg.text == "❌ Удалить транзакцию")
+@router.message(lambda msg: msg.text == ru.TRANSACTIONS_DELETE_TRANSACTION)
 @safe_handler
 async def delete_transaction_handler(message: types.Message, state: FSMContext):
     await state.set_state(TransactionState.deleting_by_id)
-    await message.answer("Введите id транзакции:")
+    await message.answer(ru.TRANSACTIONS_WRITE_TRANSACTION_ID)
 
 
 @router.message(TransactionState.deleting_by_id)
@@ -112,9 +119,9 @@ async def delete_transaction_by_id(message: types.Message, state: FSMContext):
     try:
         transaction_id = int(message.text)
         if delete_transaction(transaction_id):
-            await message.answer(f"Транзакция {transaction_id} удалена.")
+            await message.answer(ru.TRANSACTIONS_DELETED.format(transaction_id))
         else:
-            await message.answer("Транзакция не найдена.")
+            await message.answer(ru.TRANSACTIONS_NOT_FOUND)
         await state.clear()
     except Exception:
-        await message.answer("Неверный формат.")
+        await message.answer(ru.ERROR_WRONG_FORMAT)

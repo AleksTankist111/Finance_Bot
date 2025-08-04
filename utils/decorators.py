@@ -1,6 +1,6 @@
 from functools import wraps
 from aiogram.types import Message
-
+from translations import ru
 
 def safe_handler(func):
     @wraps(func)
@@ -8,6 +8,6 @@ def safe_handler(func):
         try:
             return await func(message, *args, **kwargs)
         except Exception as e:
-            await message.answer("Произошла ошибка. Попробуйте позже.")
+            await message.answer(ru.ERROR_COMMON)
             print(f"Error in {func.__name__}: {e}")
     return wrapper

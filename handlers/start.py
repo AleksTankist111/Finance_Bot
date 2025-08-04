@@ -1,5 +1,6 @@
 from aiogram import Router, types
 from aiogram.filters import CommandStart
+from translations import ru
 
 router = Router()
 
@@ -8,12 +9,10 @@ router = Router()
 @router.message(CommandStart())
 async def start_handler(message: types.Message):
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
-        [types.KeyboardButton(text="➕ Добавить транзакцию")],
-        [types.KeyboardButton(text="📊 Показать статистику")],
-        [types.KeyboardButton(text="🧾 Вывести транзакции"), types.KeyboardButton(text="📤 Экспорт в Excel")],
-        [types.KeyboardButton(text="💼 Источники"), types.KeyboardButton(text="📁 Категории")],
-        [types.KeyboardButton(text="➕💼 Добавить Источники"), types.KeyboardButton(text="➕📁 Добавить Категории")],
-        [types.KeyboardButton(text="❌💼 Удалить Источники"), types.KeyboardButton(text="❌📁 Удалить Категории")],
-        [types.KeyboardButton(text="❌ Удалить транзакцию")]
+        [types.KeyboardButton(text=ru.TRANSACTIONS)],
+        [types.KeyboardButton(text=ru.SOURCES), types.KeyboardButton(text=ru.CATEGORIES)],
+        [types.KeyboardButton(text=ru.STATISTICS), types.KeyboardButton(text=ru.EXPORT_EXCEL)],
+        [types.KeyboardButton(text=ru.PLANNING)],
+        [types.KeyboardButton(text=ru.FAMILY)]
     ])
     await message.answer("Выберите действие:", reply_markup=keyboard)

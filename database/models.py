@@ -11,7 +11,7 @@ class Source(Base):
     __tablename__ = "sources"
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True)
-    currency = Column(String, default="DEFAULT_CURRENCY")
+    currency = Column(String, default=DEFAULT_CURRENCY)
     is_deleted = Column(Boolean, default=False)
 
 class Category(Base):
@@ -24,7 +24,7 @@ class Transaction(Base):
     __tablename__ = "transactions"
     id = Column(Integer, primary_key=True)
     amount = Column(Float)
-    currency = Column(String, default="DEFAULT_CURRENCY")
+    currency = Column(String, default=DEFAULT_CURRENCY)
     is_income = Column(Boolean)
     source_id = Column(Integer, ForeignKey("sources.id"))
     category_id = Column(Integer, ForeignKey("categories.id"))
