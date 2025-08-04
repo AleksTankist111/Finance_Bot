@@ -1,3 +1,4 @@
+STARTING_MESSAGE = "Выберите действие:"
 
 # Transactions menu
 TRANSACTIONS = "💵 Транзакции"
@@ -14,8 +15,9 @@ TRANSACTIONS_WRITE_SUM = "Введите сумму (например: 118.86 RS
 TRANSACTIONS_WRITE_COMMENT = "Введите комментарий (можно оставить пустым):"
 TRANSACTIONS_TRANSACTION_ADDED = "✅ Транзакция {} добавлена:\n"
 TRANSACTIONS_TRANSACTION_ADDED_TYPE = "Тип: {}\n"
-TRANSACTIONS_TRANSACTION_ADDED_SOURCE = "Источник: {}\n"
+TRANSACTIONS_TRANSACTION_ADDED_SOURCE = "Кошелёк: {}\n"
 TRANSACTIONS_TRANSACTION_ADDED_CATEGORY = "Категория: {}\n"
+TRANSACTIONS_TRANSACTION_ADDED_AMOUNT = "Значение: {} ({})\n"
 TRANSACTIONS_TRANSACTION_ADDED_COMMENT = "Комментарий: {}\n"
 TRANSACTIONS_TRANSACTION_ADDED_DATE = "Дата: {}"
 TRANSACTIONS_WRITE_TRANSACTION_ID = "Введите id транзакции:"
@@ -70,8 +72,14 @@ FAMILY_CREATE_FAMILY = "➕ Создать семью"
 FAMILY_ADD_MEMBER = "➕ Добавить в семью"
 FAMILY_REMOVE_MEMBER = "❌ Убрать из семьи"
 
+# Navigation
+BUTTON_BACK = "Назад"
+CHOOSE_ACTION = "Выберите действие: "
+
 # Errors
 ERROR_NAME_EXIST = "Error: Выбранное имя уже существует. Выберите другое имя."
+ERROR_NAME_NOT_EXIST = "Error: Такого имени не существует. Проверьте имя и введите снова."
 ERROR_WRONG_TRANSACTION_FORMAT = "Неверный формат. Пример: 118.86 RSD или 118.86"
 ERROR_WRONG_FORMAT = "Error: Неверный формат."
-ERROR_COMMON = "Произошла ошибка. Попробуйте позже."
+ERROR_COMMON = "Error: Произошла ошибка. Попробуйте позже."
+ERROR_CHAT_CLEAR = "Error: Не удалось очистить чат. "

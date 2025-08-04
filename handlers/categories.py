@@ -1,6 +1,8 @@
 from aiogram import Router, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+
+from handlers.start import start_handler
 from utils.decorators import safe_handler
 from database.crud import add_category, get_categories, soft_delete_category
 from translations import ru
@@ -11,7 +13,19 @@ router = Router()
 
 class CategoryState(StatesGroup):
     entering_name = State()
-    deleting_by_id = State()
+    deleting_by_name = State()
+
+
+@router.message(lambda msg: msg.text == ru.CATEGORIES)
+@safe_handler
+async def start_categories(message: types.Message):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
+        [types.KeyboardButton(text=ru.CATEGORIES_SHOW_CATEGORIES)],
+        [types.KeyboardButton(text=ru.CATEGORIES_ADD_CATEGORY)],
+        [types.KeyboardButton(text=ru.CATEGORIES_DELETE_CATEGORY)],
+        [types.KeyboardButton(text=ru.BUTTON_BACK)]
+    ])
+    await message.answer(ru.CHOOSE_ACTION, reply_markup=keyboard)
 
 
 @router.message(lambda msg: msg.text == ru.CATEGORIES_SHOW_CATEGORIES)
@@ -32,7 +46,6 @@ async def add_category_handler(message: types.Message, state: FSMContext):
     await message.answer(ru.CATEGORIES_CHOOSE_CATEGORY_NAME)
 
 
-# TODO: Обработать ошибку "Такое имя уже существует"
 @router.message(CategoryState.entering_name)
 @safe_handler
 async def add_category_entering_name(message: types.Message, state: FSMContext):
@@ -43,12 +56,20 @@ async def add_category_entering_name(message: types.Message, state: FSMContext):
     await state.clear()
 
 
-# TODO: Изменить на ввод из меню (по тексту)
 @router.message(lambda msg: msg.text == ru.CATEGORIES_DELETE_CATEGORY)
 @safe_handler
-async def delete_category_handler(message: types.Message):
-    name = message.text.split(maxsplit=1)[1]
+async def delete_category_handler(message: types.Message, state: FSMContext):
+    await state.set_state(CategoryState.deleting_by_name)
+    await message.answer(ru.CATEGORIES_CHOOSE_CATEGORY_NAME)
+
+
+@router.message(CategoryState.deleting_by_name)
+@safe_handler
+async def delete_category_by_name(message: types.Message, state: FSMContext):
+    name = message.text
     if soft_delete_category(name):
         await message.answer(ru.CATEGORIES_DELETED.format(name))
+        await state.clear()
+        await start_handler(message)
     else:
         await message.answer(ru.CATEGORIES_NOT_FOUND)

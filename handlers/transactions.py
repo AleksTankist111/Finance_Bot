@@ -1,8 +1,11 @@
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import ReplyKeyboardRemove
+
 from utils.decorators import safe_handler
 from utils.currency import parse_amount_currency
+from utils.middlewares import send_and_store
 from database.crud import get_sources, get_categories, add_transaction, delete_transaction
 from handlers.start import start_handler
 from translations import ru
@@ -18,15 +21,31 @@ class TransactionState(StatesGroup):
     entering_comment = State()
     deleting_by_id = State()
 
+
+@router.message(lambda msg: msg.text == ru.TRANSACTIONS)
+@safe_handler
+async def start_transactions(message: types.Message):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
+        [types.KeyboardButton(text=ru.TRANSACTIONS_SHOW_TRANSACTIONS)], #TODO
+        [types.KeyboardButton(text=ru.TRANSACTIONS_ADD_TRANSACTION)],
+        [types.KeyboardButton(text=ru.TRANSACTIONS_DELETE_TRANSACTION)],
+        [types.KeyboardButton(text=ru.BUTTON_BACK)]
+    ])
+    await message.answer(ru.CHOOSE_ACTION, reply_markup=keyboard)
+
+
 @router.message(lambda msg: msg.text == ru.TRANSACTIONS_ADD_TRANSACTION)
 @safe_handler
-async def start_transaction(message: types.Message, state: FSMContext):
+async def start_add_transaction(message: types.Message, state: FSMContext):
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
         [types.KeyboardButton(text=ru.TRANSACTIONS_TYPE_INCOME)],
         [types.KeyboardButton(text=ru.TRANSACTIONS_TYPE_OUTCOME)]
     ])
     await state.set_state(TransactionState.choosing_type)
-    await message.answer(ru.TRANSACTIONS_CHOOSE_TYPE, reply_markup=keyboard)
+    await send_and_store(message=message,
+                         text=ru.TRANSACTIONS_CHOOSE_TYPE,
+                         state=state,
+                         reply_markup=keyboard)
 
 
 @router.message(TransactionState.choosing_type, F.text.in_({ru.TRANSACTIONS_TYPE_INCOME, ru.TRANSACTIONS_TYPE_OUTCOME}))
@@ -37,7 +56,10 @@ async def choose_type(message: types.Message, state: FSMContext):
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True,
         keyboard=[[types.KeyboardButton(text=s.name)] for s in sources])
     await state.set_state(TransactionState.choosing_source)
-    await message.answer(ru.TRANSACTIONS_CHOOSE_SOURCE, reply_markup=keyboard)
+    await send_and_store(message=message,
+                         text=ru.TRANSACTIONS_CHOOSE_SOURCE,
+                         state=state,
+                         reply_markup=keyboard)
 
 
 @router.message(TransactionState.choosing_source)
@@ -53,7 +75,10 @@ async def choose_source(message: types.Message, state: FSMContext):
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True,
         keyboard=[[types.KeyboardButton(text=c.name)] for c in categories])
     await state.set_state(TransactionState.choosing_category)
-    await message.answer(ru.TRANSACTIONS_CHOOSE_CATEGORY, reply_markup=keyboard)
+    await send_and_store(message=message,
+                            text=ru.TRANSACTIONS_CHOOSE_CATEGORY,
+                            state=state,
+                            reply_markup=keyboard)
 
 
 @router.message(TransactionState.choosing_category)
@@ -66,7 +91,10 @@ async def choose_category(message: types.Message, state: FSMContext):
         return
     await state.update_data(category_id=category.id)
     await state.set_state(TransactionState.entering_amount)
-    await message.answer(ru.TRANSACTIONS_WRITE_SUM)
+    await send_and_store(message=message,
+                            text=ru.TRANSACTIONS_WRITE_SUM,
+                            state=state,
+                            reply_markup=ReplyKeyboardRemove())
 
 
 @router.message(TransactionState.entering_amount)
@@ -76,7 +104,9 @@ async def enter_amount(message: types.Message, state: FSMContext):
         amount, currency = parse_amount_currency(message.text)
         await state.update_data(amount=amount, currency=currency)
         await state.set_state(TransactionState.entering_comment)
-        await message.answer(ru.TRANSACTIONS_WRITE_COMMENT)
+        await send_and_store(message=message,
+                                text=ru.TRANSACTIONS_WRITE_COMMENT,
+                                state=state)
     except ValueError:
         await message.answer(ru.ERROR_WRONG_TRANSACTION_FORMAT)
 
@@ -93,15 +123,23 @@ async def enter_comment(message: types.Message, state: FSMContext):
         category_id=data["category_id"],
         comment=message.text
     )
-    await message.answer(
+    final_msg = await message.answer(
         ru.TRANSACTIONS_TRANSACTION_ADDED.format(transaction.id) +
-        ru.TRANSACTIONS_TRANSACTION_ADDED_SOURCE.format(
+        ru.TRANSACTIONS_TRANSACTION_ADDED_TYPE.format(
                 ru.TRANSACTIONS_TYPE_INCOME if transaction.is_income else ru.TRANSACTIONS_TYPE_OUTCOME) +
         ru.TRANSACTIONS_TRANSACTION_ADDED_SOURCE.format(transaction.source.name) +
         ru.TRANSACTIONS_TRANSACTION_ADDED_CATEGORY.format(transaction.category.name) +
+        ru.TRANSACTIONS_TRANSACTION_ADDED_AMOUNT.format(transaction.amount, transaction.currency) +
         ru.TRANSACTIONS_TRANSACTION_ADDED_COMMENT.format(transaction.comment or '—') +
         ru.TRANSACTIONS_TRANSACTION_ADDED_DATE.format(transaction.date.strftime('%Y-%m-%d %H:%M'))
     )
+
+    data = await state.get_data()
+    tracked = data.get("tracked_messages", [])
+    for msg_id in tracked:
+        if msg_id != final_msg.message_id:
+            await message.chat.delete_message(msg_id)
+
     await state.clear()
     await start_handler(message)
 

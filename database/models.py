@@ -4,21 +4,21 @@ from datetime import datetime
 from config import DEFAULT_CURRENCY
 
 Base = declarative_base()
-# TODO: Убрать уникальность у колонки "Имя" у источника, т.к. удалённые источники и категории могут иметь то же имя.
 
 
 class Source(Base):
     __tablename__ = "sources"
     id = Column(Integer, primary_key=True)
-    name = Column(String, unique=True)
-    currency = Column(String, default=DEFAULT_CURRENCY)
+    name = Column(String)
     is_deleted = Column(Boolean, default=False)
+
 
 class Category(Base):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True)
-    name = Column(String, unique=True)
+    name = Column(String)
     is_deleted = Column(Boolean, default=False)
+
 
 class Transaction(Base):
     __tablename__ = "transactions"
