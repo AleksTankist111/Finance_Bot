@@ -70,6 +70,6 @@ async def delete_category_by_name(message: types.Message, state: FSMContext):
     if soft_delete_category(name):
         await message.answer(ru.CATEGORIES_DELETED.format(name))
         await state.clear()
-        await start_handler(message)
+        await start_handler(message, state)
     else:
         await message.answer(ru.CATEGORIES_NOT_FOUND)

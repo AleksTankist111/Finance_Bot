@@ -14,6 +14,11 @@ def get_categories():
     return session.query(Category).filter_by(is_deleted=False).all()
 
 
+def get_source_name_by_id(source_id: int) -> str:
+    source = session.query(Source).filter(Source.id == source_id, Source.is_deleted == False).first()
+    return source.name if source else "—"
+
+
 def is_name_exist(table, name: str) -> bool:
     return session.query(table).filter(
         table.name == name,
@@ -81,14 +86,13 @@ def delete_transaction(transaction_id):
     return False
 
 
-def soft_delete_source(name):
-    source = session.query(Source).filter_by(name=name, is_deleted=False).first()
+def soft_delete_source(id):
+    source = session.query(Source).filter_by(id=id, is_deleted=False).first()
     if source:
         source.is_deleted = True
         session.commit()
         return True
     return False
-
 
 def soft_delete_category(name):
     category = session.query(Category).filter_by(name=name, is_deleted=False).first()
@@ -101,3 +105,7 @@ def soft_delete_category(name):
 
 def get_transactions():
     return session.query(Transaction).all()
+
+
+def get_limit_transactions(limit=20):
+    return session.query(Transaction).order_by(Transaction.date.desc()).limit(limit).all()

@@ -83,3 +83,5 @@ ERROR_WRONG_TRANSACTION_FORMAT = "Неверный формат. Пример: 1
 ERROR_WRONG_FORMAT = "Error: Неверный формат."
 ERROR_COMMON = "Error: Произошла ошибка. Попробуйте позже."
 ERROR_CHAT_CLEAR = "Error: Не удалось очистить чат. "
+ERROR_NO_CATEGORIES = "Error: Список категорий пуст. Нажмите /start и добавьте хотя бы одну категорию."
+ERROR_NO_SOURCES = "Error: Список кошельков пуст. Нажмите /start и добавьте хотя бы один кошелёк"

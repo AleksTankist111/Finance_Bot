@@ -5,10 +5,12 @@ from aiogram.types import ReplyKeyboardRemove
 
 from utils.decorators import safe_handler
 from utils.currency import parse_amount_currency
+from utils.keyboards import make_inline_keyboard
 from utils.middlewares import send_and_store
-from database.crud import get_sources, get_categories, add_transaction, delete_transaction
-from handlers.start import start_handler
+from database.crud import get_sources, get_categories, add_transaction, delete_transaction, get_limit_transactions
+from handlers.start import start_handler, back_to_main
 from translations import ru
+from tabulate import tabulate
 
 router = Router()
 
@@ -24,77 +26,103 @@ class TransactionState(StatesGroup):
 
 @router.message(lambda msg: msg.text == ru.TRANSACTIONS)
 @safe_handler
-async def start_transactions(message: types.Message):
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
-        [types.KeyboardButton(text=ru.TRANSACTIONS_SHOW_TRANSACTIONS)], #TODO
-        [types.KeyboardButton(text=ru.TRANSACTIONS_ADD_TRANSACTION)],
-        [types.KeyboardButton(text=ru.TRANSACTIONS_DELETE_TRANSACTION)],
-        [types.KeyboardButton(text=ru.BUTTON_BACK)]
+async def start_transactions(message: types.Message, state: FSMContext):
+
+    # Очистка истории сообщений от мусора (вход в ветку "Транзакция")
+    await message.delete()
+    m_remove_keyboard = await message.answer(ru.STARTING_MESSAGE, reply_markup=ReplyKeyboardRemove())
+    await m_remove_keyboard.delete()
+    data = await state.get_data()
+    last_msg_id = data.get("start_bot_message_id")
+    if last_msg_id:
+        try:
+            await message.chat.delete_message(last_msg_id)
+        except Exception:
+            pass  # сообщение могло быть уже удалено
+
+    keyboard = make_inline_keyboard([
+        [(ru.TRANSACTIONS_SHOW_TRANSACTIONS, "show_transactions")],
+        [(ru.TRANSACTIONS_ADD_TRANSACTION, "add_transaction")],
+        [(ru.TRANSACTIONS_DELETE_TRANSACTION, "delete_transaction")],
+        [(ru.BUTTON_BACK, "back_to_main")]
     ])
-    await message.answer(ru.CHOOSE_ACTION, reply_markup=keyboard)
+    await send_and_store(message=message,
+                         text=ru.CHOOSE_ACTION,
+                         state=state,
+                         reply_markup=keyboard)
 
 
-@router.message(lambda msg: msg.text == ru.TRANSACTIONS_ADD_TRANSACTION)
+@router.callback_query(F.data == "add_transaction")
 @safe_handler
-async def start_add_transaction(message: types.Message, state: FSMContext):
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
-        [types.KeyboardButton(text=ru.TRANSACTIONS_TYPE_INCOME)],
-        [types.KeyboardButton(text=ru.TRANSACTIONS_TYPE_OUTCOME)]
+async def start_add_transaction(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    keyboard = make_inline_keyboard([
+        [(ru.TRANSACTIONS_TYPE_INCOME, "type_income")],
+        [(ru.TRANSACTIONS_TYPE_OUTCOME, "type_outcome")]
     ])
     await state.set_state(TransactionState.choosing_type)
-    await send_and_store(message=message,
-                         text=ru.TRANSACTIONS_CHOOSE_TYPE,
-                         state=state,
-                         reply_markup=keyboard)
+    data = await state.get_data()
+    bot_msg_ids = data.get('tracked_messages', [])
+    bot_msg_ids.append(callback.message.message_id)
+    await state.update_data(bot_msg_ids=bot_msg_ids)
+    await callback.message.edit_text(ru.TRANSACTIONS_CHOOSE_TYPE, reply_markup=keyboard)
 
 
-@router.message(TransactionState.choosing_type, F.text.in_({ru.TRANSACTIONS_TYPE_INCOME, ru.TRANSACTIONS_TYPE_OUTCOME}))
+@router.callback_query(F.data.in_({"type_income", "type_outcome"}))
 @safe_handler
-async def choose_type(message: types.Message, state: FSMContext):
-    await state.update_data(is_income=(message.text == ru.TRANSACTIONS_TYPE_INCOME))
+async def choose_type(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    is_income = callback.data == "type_income"
+    await state.update_data(is_income=is_income)
+
     sources = get_sources()
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True,
-        keyboard=[[types.KeyboardButton(text=s.name)] for s in sources])
+
+    if len(sources) == 0:
+        await state.clear()
+        await callback.message.delete()
+        await callback.message.answer(ru.ERROR_NO_SOURCES)
+        # await back_to_main(callback, state)
+        return
+
+    keyboard = make_inline_keyboard([
+        [(s.name, f"source_{s.id}")] for s in sources
+    ])
     await state.set_state(TransactionState.choosing_source)
-    await send_and_store(message=message,
-                         text=ru.TRANSACTIONS_CHOOSE_SOURCE,
-                         state=state,
-                         reply_markup=keyboard)
+    await callback.message.edit_text(ru.TRANSACTIONS_CHOOSE_SOURCE, reply_markup=keyboard)
 
 
-@router.message(TransactionState.choosing_source)
+@router.callback_query(F.data.startswith("source_"))
 @safe_handler
-async def choose_source(message: types.Message, state: FSMContext):
-    sources = get_sources()
-    source = next((s for s in sources if s.name == message.text), None)
-    if not source:
-        await message.answer(ru.SOURCES_NOT_FOUND)
-        return
-    await state.update_data(source_id=source.id)
+async def choose_source(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    source_id = int(callback.data.split("_")[1])
+    await state.update_data(source_id=source_id)
+
     categories = get_categories()
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True,
-        keyboard=[[types.KeyboardButton(text=c.name)] for c in categories])
+
+    if len(categories) == 0:
+        await state.clear()
+        await callback.message.delete()
+        await callback.message.answer(ru.ERROR_NO_CATEGORIES)
+        # await back_to_main(callback, state)
+        return
+
+    keyboard = make_inline_keyboard([
+        [(c.name, f"category_{c.id}")] for c in categories
+    ])
     await state.set_state(TransactionState.choosing_category)
-    await send_and_store(message=message,
-                            text=ru.TRANSACTIONS_CHOOSE_CATEGORY,
-                            state=state,
-                            reply_markup=keyboard)
+    await callback.message.edit_text(ru.TRANSACTIONS_CHOOSE_CATEGORY, reply_markup=keyboard)
 
 
-@router.message(TransactionState.choosing_category)
+@router.callback_query(F.data.startswith("category_"))
 @safe_handler
-async def choose_category(message: types.Message, state: FSMContext):
-    categories = get_categories()
-    category = next((c for c in categories if c.name == message.text), None)
-    if not category:
-        await message.answer(ru.CATEGORIES_NOT_FOUND)
-        return
-    await state.update_data(category_id=category.id)
+async def choose_category(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    category_id = int(callback.data.split("_")[1])
+    await state.update_data(category_id=category_id)
+
     await state.set_state(TransactionState.entering_amount)
-    await send_and_store(message=message,
-                            text=ru.TRANSACTIONS_WRITE_SUM,
-                            state=state,
-                            reply_markup=ReplyKeyboardRemove())
+    await callback.message.edit_text(ru.TRANSACTIONS_WRITE_SUM)
 
 
 @router.message(TransactionState.entering_amount)
@@ -105,8 +133,8 @@ async def enter_amount(message: types.Message, state: FSMContext):
         await state.update_data(amount=amount, currency=currency)
         await state.set_state(TransactionState.entering_comment)
         await send_and_store(message=message,
-                                text=ru.TRANSACTIONS_WRITE_COMMENT,
-                                state=state)
+                             text=ru.TRANSACTIONS_WRITE_COMMENT,
+                             state=state)
     except ValueError:
         await message.answer(ru.ERROR_WRONG_TRANSACTION_FORMAT)
 
@@ -138,17 +166,21 @@ async def enter_comment(message: types.Message, state: FSMContext):
     tracked = data.get("tracked_messages", [])
     for msg_id in tracked:
         if msg_id != final_msg.message_id:
-            await message.chat.delete_message(msg_id)
+            try:
+                await message.chat.delete_message(msg_id)
+            except Exception:
+                pass
 
     await state.clear()
-    await start_handler(message)
+    await start_handler(message, state)
 
 
-@router.message(lambda msg: msg.text == ru.TRANSACTIONS_DELETE_TRANSACTION)
+@router.callback_query(F.data == "delete_transaction")
 @safe_handler
-async def delete_transaction_handler(message: types.Message, state: FSMContext):
+async def delete_transaction_handler(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
     await state.set_state(TransactionState.deleting_by_id)
-    await message.answer(ru.TRANSACTIONS_WRITE_TRANSACTION_ID)
+    await callback.message.edit_text(ru.TRANSACTIONS_WRITE_TRANSACTION_ID)
 
 
 @router.message(TransactionState.deleting_by_id)
@@ -163,3 +195,33 @@ async def delete_transaction_by_id(message: types.Message, state: FSMContext):
         await state.clear()
     except Exception:
         await message.answer(ru.ERROR_WRONG_FORMAT)
+
+
+@router.callback_query(F.data == "show_transactions")
+@safe_handler
+async def delete_transaction_handler(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+
+    data = get_limit_transactions(20)
+    formatted = []
+    for tx in data:
+        formatted.append({
+            "ID": tx.id,
+            "SUM": f"{tx.amount:.2f} ({tx.currency})",
+            "Type": ru.TRANSACTIONS_TYPE_INCOME if tx.is_income else ru.TRANSACTIONS_TYPE_OUTCOME,
+            "Source": tx.source.name if tx.source else "—",
+            "Category": tx.category.name if tx.category else "—",
+            "Comment": tx.comment or "",
+            "Date": tx.date.strftime("%Y-%m-%d %H:%M"),
+        })
+
+    headers = ["ID", "Sum", "Type", "Source", "Category", "Comment", "Date"]
+    rows = [[
+        tx["ID"], tx["SUM"], tx["Type"], tx["Source"],
+        tx["Category"], tx["Comment"], tx["Date"]
+    ] for tx in formatted]
+
+    table = tabulate(rows, headers=headers, tablefmt="grid")
+    table_text = f"<pre>{table}</pre>"
+
+    await callback.message.edit_text(table_text, parse_mode="HTML")
