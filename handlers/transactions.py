@@ -7,7 +7,8 @@ from utils.decorators import safe_handler
 from utils.currency import parse_amount_currency
 from utils.keyboards import make_inline_keyboard
 from utils.middlewares import send_and_store, delete_trash_messages, retrieve_stored_data
-from database.crud import get_sources, get_categories, add_transaction, delete_transaction, get_limit_transactions
+from database.crud import get_sources, get_categories, add_transaction, delete_transaction, get_limit_transactions, \
+    get_category_id_by_name, get_source_name_by_id
 from handlers.start import start_handler, back_to_main
 from translations import ru
 from tabulate import tabulate
@@ -278,11 +279,38 @@ async def enter_amount(message: types.Message, state: FSMContext):
         amount, currency = parse_amount_currency(message.text)
         data = await state.get_data()
         from_source_id = data["from_source_id"]
-        to_source_data = data["to_source_id"]
+        to_source_id = data["to_source_id"]
 
-        #TODO: Добавить перевод между 2 кошельков. Для этого нужно будет, видимо, модернизировать таблицу Transactions
+        transfer_category_id = get_category_id_by_name(ru.TRANSACTIONS_TYPE_TRANSFERS) #TODO replace when user added
+        to_source_name = get_source_name_by_id(to_source_id)
+        from_source_name = get_source_name_by_id(from_source_id)
 
+        transaction_from = add_transaction(
+            amount=amount,
+            currency=currency,
+            is_income=False,
+            source_id=from_source_id,
+            category_id=transfer_category_id,
+            comment=ru.TRANSFER_FROM_TO.format(from_source_name, to_source_name)
+        )
 
+        transaction_to = add_transaction(
+            amount=amount,
+            currency=currency,
+            is_income=True,
+            source_id=to_source_id,
+            category_id=transfer_category_id,
+            comment=ru.TRANSFER_FROM_TO.format(from_source_name, to_source_name)
+        )
+
+        await delete_trash_messages(message, state)
+
+        await message.answer(ru.TRANSFER_COMPLETED.format(from_source_name,
+                                                          to_source_name,
+                                                          amount,
+                                                          currency,
+                                                          transaction_from.id,
+                                                          transaction_to.id))
 
     except ValueError:
         await message.answer(ru.ERROR_WRONG_TRANSACTION_FORMAT)

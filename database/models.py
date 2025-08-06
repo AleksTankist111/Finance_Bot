@@ -11,6 +11,7 @@ class Source(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String)
     is_deleted = Column(Boolean, default=False)
+    # TODO: Add non-necessary field "from_source_id" for proper work of transfer operations ???
 
 
 class Category(Base):

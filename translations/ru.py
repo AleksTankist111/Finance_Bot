@@ -9,6 +9,7 @@ TRANSACTIONS_NO_TRANSACTIONS = "Нет транзакций!"
 TRANSACTIONS_TYPE_INCOME = "Доход"
 TRANSACTIONS_TYPE_OUTCOME = "Расход"
 TRANSACTIONS_TYPE_TRANSFER = "Перевод"
+TRANSACTIONS_TYPE_TRANSFERS = "Переводы"
 TRANSACTIONS_TYPE_TRANSFER_FROM = "Выберите исходящий кошелёк: "
 TRANSACTIONS_TYPE_TRANSFER_TO = "Выберите целевой кошелёк: "
 TRANSACTIONS_CHOOSE_TYPE = "Выберите тип транзакции:"
@@ -27,6 +28,9 @@ TRANSACTIONS_WRITE_TRANSACTION_ID = "Введите id транзакции:"
 TRANSACTIONS_DELETED = "Транзакция {} удалена"
 TRANSACTIONS_NOT_FOUND = "Транзакция не найдена"
 
+
+TRANSFER_FROM_TO = "Перевод из кошелька '{}' в кошелёк '{}'"
+TRANSFER_COMPLETED = "✅ Перевод из кошелька '{}' в кошелёк '{}' {}({}) успешно выполнен. \nНомера транзакций: {}, {}"
 
 # Sources menu
 SOURCES = "💼 Кошельки"

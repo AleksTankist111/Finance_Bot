@@ -24,7 +24,12 @@ def get_category_name_by_id(category_id: int) -> str:
     return category.name if category else "—"
 
 
-def is_name_exist(table, name: str) -> bool:
+def get_category_id_by_name(name: str) -> int:
+    category = session.query(Category).filter(Category.name == name, Category.is_deleted == False).first()
+    return category.id if category else None
+
+
+def _is_name_exist(table, name: str) -> bool:
     return session.query(table).filter(
         table.name == name,
         table.is_deleted == False
@@ -32,11 +37,11 @@ def is_name_exist(table, name: str) -> bool:
 
 
 def is_name_exist_in_source(name: str) -> bool:
-    return is_name_exist(Source, name)
+    return _is_name_exist(Source, name)
 
 
 def is_name_exist_in_category(name: str) -> bool:
-    return is_name_exist(Category, name)
+    return _is_name_exist(Category, name)
 
 
 def get_source_amounts():
