@@ -4,6 +4,7 @@ from aiogram.fsm.context import FSMContext
 
 from translations import ru
 from utils.decorators import safe_handler
+from utils.middlewares import delete_trash_messages
 
 router = Router()
 
@@ -28,14 +29,7 @@ async def back_to_main(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
 
-    data = await state.get_data()
-    tracked = data.get("tracked_messages", [])
-    for msg_id in tracked:
-        try:
-            await callback.message.chat.delete_message(msg_id)
-        except Exception:
-            pass
-
+    await delete_trash_messages(message=callback.message, state=state)
     # Удаляем inline-клавиатуру
     await callback.message.delete()
 

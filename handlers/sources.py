@@ -9,7 +9,7 @@ from database.crud import add_source, get_sources, soft_delete_source, get_sourc
 from translations import ru
 from config import DEFAULT_CURRENCY
 from utils.keyboards import make_inline_keyboard
-from utils.middlewares import send_and_store
+from utils.middlewares import send_and_store, delete_trash_messages, retrieve_stored_data, delete_starting_message
 
 router = Router()
 
@@ -23,17 +23,8 @@ class SourceState(StatesGroup):
 @safe_handler
 async def start_sources(message: types.Message, state: FSMContext):
 
-    # Очистка истории сообщений от мусора (вход в ветку "Транзакция")
-    await message.delete()
-    m_remove_keyboard = await message.answer(ru.STARTING_MESSAGE, reply_markup=ReplyKeyboardRemove())
-    await m_remove_keyboard.delete()
-    data = await state.get_data()
-    last_msg_id = data.get("start_bot_message_id")
-    if last_msg_id:
-        try:
-            await message.chat.delete_message(last_msg_id)
-        except Exception:
-            pass  # сообщение могло быть уже удалено
+    # Очистка истории сообщений от мусора (вход в ветку "Кошелек")
+    await delete_starting_message(message, state)
 
     keyboard = make_inline_keyboard([
         [(ru.SOURCES_SHOW_SOURCES, "show_sources")],
@@ -64,8 +55,7 @@ async def show_sources(callback: types.CallbackQuery):
 async def add_source_handler(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(SourceState.entering_name)
-    data = await state.get_data()
-    bot_msg_ids = data.get('tracked_messages', [])
+    bot_msg_ids = await retrieve_stored_data(state, 'tracked_messages')
     bot_msg_ids.append(callback.message.message_id)
     await state.update_data(bot_msg_ids=bot_msg_ids)
     await callback.message.edit_text(ru.SOURCES_CHOOSE_SOURCE_NAME)
@@ -76,15 +66,9 @@ async def add_source_handler(callback: types.CallbackQuery, state: FSMContext):
 async def add_source_entering_name(message: types.Message, state: FSMContext):
     name = message.text
     source = add_source(name)
-    await message.delete()
 
-    data = await state.get_data()
-    tracked = data.get("tracked_messages", [])
-    for msg_id in tracked:
-        try:
-            await message.chat.delete_message(msg_id)
-        except Exception:
-            pass
+    await message.delete()
+    await delete_trash_messages(message, state)
 
     await message.answer(ru.SOURCES_ADDED.format(source.name))
     await state.clear()
@@ -95,8 +79,7 @@ async def add_source_entering_name(message: types.Message, state: FSMContext):
 async def delete_source_handler(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(SourceState.deleting_by_name)
-    data = await state.get_data()
-    bot_msg_ids = data.get('tracked_messages', [])
+    bot_msg_ids = await retrieve_stored_data(state, 'tracked_messages')
     bot_msg_ids.append(callback.message.message_id)
     await state.update_data(bot_msg_ids=bot_msg_ids)
 

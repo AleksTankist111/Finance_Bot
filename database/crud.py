@@ -19,6 +19,11 @@ def get_source_name_by_id(source_id: int) -> str:
     return source.name if source else "—"
 
 
+def get_category_name_by_id(category_id: int) -> str:
+    category = session.query(Category).filter(Category.id == category_id, Category.is_deleted == False).first()
+    return category.name if category else "—"
+
+
 def is_name_exist(table, name: str) -> bool:
     return session.query(table).filter(
         table.name == name,
@@ -86,16 +91,17 @@ def delete_transaction(transaction_id):
     return False
 
 
-def soft_delete_source(id):
-    source = session.query(Source).filter_by(id=id, is_deleted=False).first()
+def soft_delete_source(source_id):
+    source = session.query(Source).filter_by(id=source_id, is_deleted=False).first()
     if source:
         source.is_deleted = True
         session.commit()
         return True
     return False
 
-def soft_delete_category(name):
-    category = session.query(Category).filter_by(name=name, is_deleted=False).first()
+
+def soft_delete_category(category_id):
+    category = session.query(Category).filter_by(id=category_id, is_deleted=False).first()
     if category:
         category.is_deleted = True
         session.commit()

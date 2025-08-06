@@ -6,7 +6,7 @@ from aiogram.types import ReplyKeyboardRemove
 from utils.decorators import safe_handler
 from utils.currency import parse_amount_currency
 from utils.keyboards import make_inline_keyboard
-from utils.middlewares import send_and_store
+from utils.middlewares import send_and_store, delete_trash_messages, retrieve_stored_data
 from database.crud import get_sources, get_categories, add_transaction, delete_transaction, get_limit_transactions
 from handlers.start import start_handler, back_to_main
 from translations import ru
@@ -22,6 +22,7 @@ class TransactionState(StatesGroup):
     entering_amount = State()
     entering_comment = State()
     deleting_by_id = State()
+    transfer_amount = State()
 
 
 @router.message(lambda msg: msg.text == ru.TRANSACTIONS)
@@ -32,8 +33,7 @@ async def start_transactions(message: types.Message, state: FSMContext):
     await message.delete()
     m_remove_keyboard = await message.answer(ru.STARTING_MESSAGE, reply_markup=ReplyKeyboardRemove())
     await m_remove_keyboard.delete()
-    data = await state.get_data()
-    last_msg_id = data.get("start_bot_message_id")
+    last_msg_id = await retrieve_stored_data(state, "start_bot_message_id")
     if last_msg_id:
         try:
             await message.chat.delete_message(last_msg_id)
@@ -58,11 +58,11 @@ async def start_add_transaction(callback: types.CallbackQuery, state: FSMContext
     await callback.answer()
     keyboard = make_inline_keyboard([
         [(ru.TRANSACTIONS_TYPE_INCOME, "type_income")],
-        [(ru.TRANSACTIONS_TYPE_OUTCOME, "type_outcome")]
+        [(ru.TRANSACTIONS_TYPE_OUTCOME, "type_outcome")],
+        [(ru.TRANSACTIONS_TYPE_TRANSFER, "type_transfer")]
     ])
     await state.set_state(TransactionState.choosing_type)
-    data = await state.get_data()
-    bot_msg_ids = data.get('tracked_messages', [])
+    bot_msg_ids = await retrieve_stored_data(state, 'tracked_messages')
     bot_msg_ids.append(callback.message.message_id)
     await state.update_data(bot_msg_ids=bot_msg_ids)
     await callback.message.edit_text(ru.TRANSACTIONS_CHOOSE_TYPE, reply_markup=keyboard)
@@ -85,13 +85,13 @@ async def choose_type(callback: types.CallbackQuery, state: FSMContext):
         return
 
     keyboard = make_inline_keyboard([
-        [(s.name, f"source_{s.id}")] for s in sources
+        [(s.name, f"add-source_{s.id}")] for s in sources
     ])
     await state.set_state(TransactionState.choosing_source)
     await callback.message.edit_text(ru.TRANSACTIONS_CHOOSE_SOURCE, reply_markup=keyboard)
 
 
-@router.callback_query(F.data.startswith("source_"))
+@router.callback_query(F.data.startswith("add-source_"))
 @safe_handler
 async def choose_source(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
@@ -108,13 +108,13 @@ async def choose_source(callback: types.CallbackQuery, state: FSMContext):
         return
 
     keyboard = make_inline_keyboard([
-        [(c.name, f"category_{c.id}")] for c in categories
+        [(c.name, f"add-category_{c.id}")] for c in categories
     ])
     await state.set_state(TransactionState.choosing_category)
     await callback.message.edit_text(ru.TRANSACTIONS_CHOOSE_CATEGORY, reply_markup=keyboard)
 
 
-@router.callback_query(F.data.startswith("category_"))
+@router.callback_query(F.data.startswith("add-category_"))
 @safe_handler
 async def choose_category(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
@@ -162,14 +162,7 @@ async def enter_comment(message: types.Message, state: FSMContext):
         ru.TRANSACTIONS_TRANSACTION_ADDED_DATE.format(transaction.date.strftime('%Y-%m-%d %H:%M'))
     )
 
-    data = await state.get_data()
-    tracked = data.get("tracked_messages", [])
-    for msg_id in tracked:
-        if msg_id != final_msg.message_id:
-            try:
-                await message.chat.delete_message(msg_id)
-            except Exception:
-                pass
+    await delete_trash_messages(message, state, exceptions=(final_msg.message_id,))
 
     await state.clear()
     await start_handler(message, state)
@@ -199,7 +192,7 @@ async def delete_transaction_by_id(message: types.Message, state: FSMContext):
 
 @router.callback_query(F.data == "show_transactions")
 @safe_handler
-async def delete_transaction_handler(callback: types.CallbackQuery, state: FSMContext):
+async def show_transaction_handler(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
     data = get_limit_transactions(20)
@@ -225,3 +218,71 @@ async def delete_transaction_handler(callback: types.CallbackQuery, state: FSMCo
     table_text = f"<pre>{table}</pre>"
 
     await callback.message.edit_text(table_text, parse_mode="HTML")
+
+
+@router.callback_query(F.data == "type_transfer")
+@safe_handler
+async def transaction_transfer_handler(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    sources = get_sources()
+
+    if len(sources) == 0:
+        await state.clear()
+        await callback.message.delete()
+        await callback.message.answer(ru.ERROR_NO_SOURCES)
+        # await back_to_main(callback, state)
+        return
+
+    keyboard = make_inline_keyboard([
+        [(s.name, f"transfer-from-source_{s.id}")] for s in sources
+    ])
+    await callback.message.edit_text(ru.TRANSACTIONS_TYPE_TRANSFER_FROM, reply_markup=keyboard)
+
+
+@router.callback_query(F.data.startswith == "transfer-from-source_")
+@safe_handler
+async def transaction_transfer_from_handler(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    from_source_id = int(callback.data.split("_")[1])
+    await state.update_data(from_source_id=from_source_id)
+    sources = get_sources()
+
+    if len(sources) == 0:
+        await state.clear()
+        await callback.message.delete()
+        await callback.message.answer(ru.ERROR_NO_SOURCES)
+        # await back_to_main(callback, state)
+        return
+
+    keyboard = make_inline_keyboard([
+        [(s.name, f"transfer-to-source_{s.id}")] for s in sources
+    ])
+    await callback.message.edit_text(ru.TRANSACTIONS_TYPE_TRANSFER_TO, reply_markup=keyboard)
+
+
+@router.callback_query(F.data.startswith == "transfer-to-source_")
+@safe_handler
+async def transaction_transfer_from_handler(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    to_source_id = int(callback.data.split("_")[1])
+    await state.update_data(to_source_id=to_source_id)
+
+    await state.set_state(TransactionState.transfer_amount)
+    await callback.message.edit_text(ru.TRANSACTIONS_WRITE_SUM)
+
+
+@router.message(TransactionState.transfer_amount)
+@safe_handler
+async def enter_amount(message: types.Message, state: FSMContext):
+    try:
+        amount, currency = parse_amount_currency(message.text)
+        data = await state.get_data()
+        from_source_id = data["from_source_id"]
+        to_source_data = data["to_source_id"]
+
+        #TODO: Добавить перевод между 2 кошельков. Для этого нужно будет, видимо, модернизировать таблицу Transactions
+
+
+
+    except ValueError:
+        await message.answer(ru.ERROR_WRONG_TRANSACTION_FORMAT)
